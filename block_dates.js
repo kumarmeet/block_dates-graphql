@@ -134,13 +134,23 @@ export default class extends Model {
     return await this.db.raw("select * from blocked_dates where DATE(`from_date`) = '" + date + "' AND date_type IN (1) OR ('" + date + "' BETWEEN DATE(`from_date`) AND DATE(`to_date`) AND date_type = 2 )");
   }
 
-  // async getFoundDateWithTime(date) {
-  //   return await this.db.raw("select * from blocked_dates where DATE(`from_date`) = '" + date + "' AND date_type IN (1) OR ('" + date + "' BETWEEN DATE(`from_date`) AND DATE(`to_date`) AND date_type = 2 )");
-  // }
+  async deleteDatesAndUpdate(delDate) {
+    if(delDate === "Invalid date"){
+      throw new Error("Please enter a valid date");
+    }
 
-  async deleteDatesAndUpdate(delDate){
-    
     const selectDates = await this.getFoundDateAndTypeFromTable(delDate);
+
+    //delete date with time
+    try {
+      const dwt = await this.dateHasFound(delDate);
+
+      if (dwt.found[0].date_type === 3) {
+      await this.deleteDate(dwt.found[0].from_date);
+    }
+    } catch (error) {
+      
+    }
     
     let found = selectDates[0];
     found = found[0];
@@ -150,8 +160,8 @@ export default class extends Model {
       return [];
     }
 
-    //delete single date and date with time
-    if(found.date_type === 1 || found.date_type === 3){
+    //delete single date
+    if(found.date_type === 1){
       await this.deleteDate(found.from_date);
       return [];
     }
@@ -175,7 +185,11 @@ export default class extends Model {
     let { startDate, endDate, fTime, tTime } = dateInput;
 
     if(!startDate){
-      return new Error("Please enter a valid block date");
+      throw new Error("Please enter a valid date");
+    }
+ 
+    if (fTime === tTime && fTime && tTime) {
+      throw new Error("Same time is not valid!");
     }
 
     try {
@@ -219,7 +233,6 @@ export default class extends Model {
 
   //this fun() will return array of single date and range of date
   async getBlockedDates() {
-
     let query = await this.compareAndGetDates("<",null,null)
   
     const findDateByType = query.map(date => this.getDateRange(date.from_date, date.to_date, "days")); //get obj val and returning a new array
@@ -227,6 +240,17 @@ export default class extends Model {
     query = await this.compareAndGetDates("=",null,null)
     
     let singleAndRangeDates = findDateByType.flat();
+
+    const timeAndDate = query;
+    const _timeArray = [];
+
+    timeAndDate.map((v) => {
+      let temp = {
+        startDate: v.from_date,
+        endDate: v.to_date
+      }
+      _timeArray.push(temp);
+    })
 
     query = query.map((date) => {
       return date.from_date.split(" ")[0];
@@ -241,7 +265,8 @@ export default class extends Model {
     return { 
       dates: dates, 
       singleAndRangeDates, //for only getting data (not related to api integration)
-      dateWithTime: query
+      dateWithTime: query,
+      _dwt: _timeArray
     }; //returning data gql format
   }
 }
